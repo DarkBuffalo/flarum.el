@@ -45,14 +45,8 @@
 
 ;;;###autoload
 (defun flarum-client-retrieve-works ()
-  "Retrieve works from flarum network."
+  "Retrieve discussions from flarum network."
   (interactive)
-  ;;(flarum-client-set-prompt-api-token)
-  ;; (if poet-client-enable-logs
-  ;;     (progn (custom-set-variables '(request-log-level 'blather)
-  ;;                                  '(request-message-level 'blather)))
-  ;;   (progn (custom-set-variables '(request-log-level -1)
-  ;;                                '(request-message-level -1))))
   (message "Retrieving Discussions list ...")
   (request
    flarum-client-api-url
