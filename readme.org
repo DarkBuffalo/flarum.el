@@ -1,3 +1,5 @@
 #+title: Flarum.el
 
+Ce paquet est en développement.
+
 Un paquet pour lire le forum emacs.gnu.re sur emacs.
