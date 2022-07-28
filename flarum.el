@@ -25,74 +25,87 @@
 ;;; Code:
 
 (require 'request)
-(require 'subr-x)
-(require 'json)
+(require 'cl-lib)
 
 
-(defgroup flarum nil
-  "Client for flarum network api."
-  :group 'Applications)
+(defvar flarum-discs '()
+  "List of videos displayed in the *peertube* buffer.")
 
-(defcustom flarum-client-api-url "https://emacs.gnu.re/public/api/discussions" "API url."
-  :type '(string)
-  :group 'flarum)
+(defface flarum-title-face
+  '((t :inherit font-lock-type-face))
+  "Face used for the disc title.")
 
-;;;; Variables
+(defun flarum--format-title (title)
+  "Format the video TITLE int the *peertube* buffer."
+  (propertize title 'face `(:inherit flarum-title-face)))
 
+(define-derived-mode flarum-mode tabulated-list-mode "flarum-mode"
+  "Major mode for flarum.")
 
-
-(defvar flarum-client-works nil "Data structure for flarum discussions.")
-
-;;;###autoload
-(defun flarum-client-retrieve-works ()
-  "Retrieve discussions from flarum network."
+(defun flarum-draw-buffer ()
+  "Draw buffer with discussions entries."
   (interactive)
-  (message "Retrieving Discussions list ...")
-  (request
-   flarum-client-api-url
-   :type "GET"
-   :headers `(("Content-Type" . "application/json"))
-   :parser 'json-read
-   :success (cl-function
-             (lambda (&key data &allow-other-keys)
-               (setq flarum-client-works data)
-               (flarum-client-works-list-popup (flarum-client-parse-works-response data))))))
+  (read-only-mode -1)
+  (erase-buffer)
+  (read-only-mode 1)
+  (setq tabulated-list-format `[("Title" 50 t)])
+  (setq tabulated-list-entries (mapcar #'flarum--insert-entry
+				       peertube-videos))
+  (tabulated-list-init-header)
+  (tabulated-list-print))
 
 
-	 (defun flarum-client-parse-works-response (discs-json-response)
-		 "Parse discussions json response and convert it to a list of vector.
-DISCS-JSON-RESPONSE api response of $API_URL/discussions"
-		 (let ((index 0))
-			 (mapcar (lambda (disc)
-								 (append (list (cl-incf index) (flarum-client-parse-works-extract-values disc))))
-							 discs-json-response)))
 
-(defun flarum-client-parse-works-extract-values (disc)
-  "Extract values from a single DISC entry.
-WORK work entry"
-  (vector (assoc-default 'id disc)
-					;; (assoc-default 'title (assoc-default 'attributes disc))
-					;; (assoc-default 'shareUrl (assoc-default 'attributes disc))
-					))
+(cl-defstruct (flarum-disc (:constructor flarum--create-disc)
+			   (:copier nil))
+  "Metadata for a Flarum discussion."
+  (id 0 :read-only t)
+  (title "" :read-only t)
+  (slug "" :read-only t)
+  (shareUrl "" :read-only t))
 
-(define-derived-mode flarum-client-mode tabulated-list-mode "flarum-mode"
-  "Major mode for flarum UI menu of publised works."
-  (define-key tabulated-list-mode-map (kbd "RET") (lambda () (interactive) (poet-client-get-selected-work-from-url)))
-  (use-local-map tabulated-list-mode-map)
-  (setq tabulated-list-format [("id" 3 t)
-                               ;; ("title" 20 nil)
-                               ;; ("attributes" 20 t)
-															 ])
-  (setq tabulated-list-padding 2)
-  (tabulated-list-init-header))
 
-(defun flarum-client-works-list-popup (discs-list)
-  "List published works in a popup.
-DISCS-LIST list of published works"
-  (pop-to-buffer "*Flarum Discussions*" nil)
-  (flarum-client-mode)
-  (setq tabulated-list-entries discs-list)
-  (tabulated-list-print t))
+(defun flarum--insert-entry (data)
+  "Insert VIDEO into the current buffer."
+  (list (flarum-discs-shareUrl data)
+	(vector (flarum--format-title (flarum-disc-title video))
+		)))
+
+
+
+(defun flarum--discussions-api ()
+  "Call the Flarum discussions api."
+  (let* ((url "https://emacs.gnu.re/public/api/discussions")
+	 (req (request
+		url
+		:parser 'json-read
+		:sync 't ))
+	 (data (alist-get 'data (request-response-data req))))
+
+    (dotimes (i (length data))
+      (let ((v (aref data i)))
+	(aset data i
+	      (flarum--create-disc
+	       :id (assoc-default 'id v)
+	       :title (assoc-default 'title (assoc-default 'attributes v))
+	       :slug (assoc-default 'slug (assoc-default 'attributes v))
+	       :shareUrl (assoc-default 'shareUrl (assoc-default 'attributes v))))))
+    data))
+
+(defun flarum-search ()
+  (interactive)
+  (let ((data (flarum--discussions-api)))
+    (setq flarum-discs data)
+    (flarum-draw-buffer)))
+
+
+(defun flarum ()
+  "Flarum."
+  (interactive)
+  (switch-to-buffer "*Flarum*")
+  (unless (eq major-mode 'flarum-mode)
+    (flarum-mode)
+    (call-interactively #'flarum-search)))
 
 
 (provide 'flarum)
