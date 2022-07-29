@@ -3,7 +3,7 @@
 ;; Copyright (C) 2022  Matthias David
 
 ;; Author: Matthias David <darkbuffalo@gnu.re>
-;; Keywords: comm
+;; Keywords: com
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -29,32 +29,18 @@
 
 
 (defvar flarum-discs '()
-  "List of videos displayed in the *peertube* buffer.")
+  "List of discussions displayed in the *flarum* buffer.")
 
 (defface flarum-title-face
   '((t :inherit font-lock-type-face))
   "Face used for the disc title.")
 
 (defun flarum--format-title (title)
-  "Format the video TITLE int the *peertube* buffer."
+  "Format the discussions TITLE in the *Flarum* buffer."
   (propertize title 'face `(:inherit flarum-title-face)))
 
 (define-derived-mode flarum-mode tabulated-list-mode "flarum-mode"
   "Major mode for flarum.")
-
-(defun flarum-draw-buffer ()
-  "Draw buffer with discussions entries."
-  (interactive)
-  (read-only-mode -1)
-  (erase-buffer)
-  (read-only-mode 1)
-  (setq tabulated-list-format `[("Title" 50 t)])
-  (setq tabulated-list-entries (mapcar #'flarum--insert-entry
-				       peertube-videos))
-  (tabulated-list-init-header)
-  (tabulated-list-print))
-
-
 
 (cl-defstruct (flarum-disc (:constructor flarum--create-disc)
 			   (:copier nil))
@@ -64,11 +50,24 @@
   (slug "" :read-only t)
   (shareUrl "" :read-only t))
 
+(defun flarum-draw-buffer ()
+  "Draw buffer with discussions entries."
+  (interactive)
+  (read-only-mode -1)
+  (erase-buffer)
+  (read-only-mode 1)
+  (setq tabulated-list-format `[("Titre" 50 t)])
+  (setq tabulated-list-entries (mapcar #'flarum--insert-entry
+				       flarum-discs))
+  (tabulated-list-init-header)
+  (tabulated-list-print))
+
+
 
 (defun flarum--insert-entry (data)
-  "Insert VIDEO into the current buffer."
-  (list (flarum-discs-shareUrl data)
-	(vector (flarum--format-title (flarum-disc-title video))
+  "Insert DATA into the current buffer."
+  (list (flarum-disc-shareUrl data)
+	(vector (flarum--format-title (flarum-disc-title data))
 		)))
 
 
