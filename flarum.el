@@ -97,7 +97,7 @@
     (setq flarum-discs data)
     (flarum-draw-buffer)))
 
-
+;;;###autoload
 (defun flarum ()
   "Flarum."
   (interactive)
