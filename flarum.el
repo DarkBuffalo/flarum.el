@@ -51,6 +51,26 @@
   '((t :inherit font-lock-type-face))
   "Face used for the disc title.")
 
+;;; Keys
+
+(defvar flarum-mode-map
+  (let ((map (make-sparse-keymap)))
+    ;; (set-keymap-parent map tabulated-list-mode-map)
+    (define-key map (kbd "o") 'flarum-open)
+    map)
+  "Local keymap for `flarum-mode' buffers.")
+
+
+(defun flarum-open ()
+  "Open the disc on web."
+  (interactive)
+  (let* (entry (tabulated-list-get-entry))
+	 (url (aref entry 0))
+    (message "Open discussion '%s'" url)
+    ;; (browse-url url)
+    ))
+
+
 (defun flarum--format-title (title)
   "Format the discussions TITLE in the *Flarum* buffer."
   (propertize title 'face `(:inherit flarum-title-face)))
@@ -73,7 +93,7 @@
   (erase-buffer)
   (read-only-mode 1)
   (setq tabulated-list-format `[("ID" 3 t)
-				("Titre" ,(- (window-width) 23) t)])
+				("Titre" ,(- (window-width) 24) :right-align t)])
   (setq tabulated-list-entries (mapcar #'flarum--insert-entry
 				       flarum-discs))
   (tabulated-list-init-header)
@@ -105,6 +125,7 @@
     data))
 
 (defun flarum-search ()
+  "Cherche dans flarum."
   (interactive)
   (let ((data (flarum--discussions-api)))
      (setq flarum-discs data)
