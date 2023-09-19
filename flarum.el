@@ -1,8 +1,8 @@
-;;; flarum.el --- Flarum unofficial api -*- lexical-binding: t; -*-
+;;; flarum.el --- Flarum unofficial tool for Emacs fr-*- lexical-binding: t; -*-
 
 
 ;; Version: 0.0.1
-;; Package-Requires: ((emacs "27.1")(request))
+;; Package-Requires: ((emacs "27.1")(request)(transient))
 ;; Author: Matthias David <darkbuffalo@gnu.re>
 
 ;; This file is NOT part of GNU Emacs.
@@ -39,11 +39,18 @@
 ;;; Code:
 
 (require 'request)
+(require 'transient)
 (require 'cl-lib)
 
 ;;; Constantes
 (defconst flarum-api-endpoint
   "https://emacs.gnu.re/public/api")
+
+(defconst flarum-api-discussions
+  (concat flarum-api-endpoint "/discussions"))
+
+(defconst flarum-api-tags
+  (concat flarum-api-endpoint "/tags"))
 
 ;;; variables
 (defvar flarum-discs '()
@@ -58,11 +65,18 @@
 
 (defvar flarum-mode-map
   (let ((map (make-sparse-keymap))
-	(mappings '("o" flarum-open)))
+	(mappings '("?" flarum-help
+		    "o" flarum-open)))
     (cl-loop for (key fn) on mappings by #'cddr
 	     do (define-key map (kbd key) fn))
     map)
   "Local keymap for `flarum-mode' buffers.")
+
+  (transient-define-prefix flarum-help ()
+    "Help transient for blog mode."
+    ["Aide Emacs Fr"
+     ("o" "Open" flarum-open)
+     ])
 
 (defun flarum-open ()
   "Open the discussion on web."
@@ -110,9 +124,8 @@
 ;;; API
 (defun flarum--discussions-api ()
   "Call the Flarum discussions api."
-  (let* ((url (concat flarum-api-endpoint "/discussions"))
-	 (req (request
-		url
+  (let* ((req (request
+		flarum-api-discussions
 		:parser 'json-read
 		:sync 't ))
 	 (data (alist-get 'data (request-response-data req))))
@@ -127,7 +140,20 @@
 	       :shareUrl (assoc-default 'shareUrl (assoc-default 'attributes v))))))
     data))
 
+(defun flarum-api-load-tags ()
+  "Call api tags for load tags."
+  (let* ((req (request flarum-api-tags
+		:parser 'json-read
+		:sync 't))
+	 (data (alist-get 'data (request-response-data req))))
+    ))
 
+(defun flarum-search ()
+  "Cherche dans flarum."
+  (interactive)
+  (let ((data (flarum--discussions-api)))
+     (setq flarum-discs data)
+    (flarum-draw-buffer)))
 
 ;;;###autoload
 (defun flarum ()
