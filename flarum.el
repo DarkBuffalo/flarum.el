@@ -41,6 +41,9 @@
 (require 'request)
 (require 'cl-lib)
 
+;;; Constantes
+(defconst flarum-api-endpoint
+  "https://emacs.gnu.re/public/api")
 
 ;;; variables
 (defvar flarum-discs '()
@@ -54,21 +57,17 @@
 ;;; Keys
 
 (defvar flarum-mode-map
-  (let ((map (make-sparse-keymap)))
-    ;; (set-keymap-parent map tabulated-list-mode-map)
-    (define-key map (kbd "o") 'flarum-open)
+  (let ((map (make-sparse-keymap))
+	(mappings '("o" flarum-open)))
+    (cl-loop for (key fn) on mappings by #'cddr
+	     do (define-key map (kbd key) fn))
     map)
   "Local keymap for `flarum-mode' buffers.")
 
-
 (defun flarum-open ()
-  "Open the disc on web."
+  "Open the discussion on web."
   (interactive)
-  (let* (entry (tabulated-list-get-entry))
-	 (url (aref entry 0))
-    (message "Open discussion '%s'" url)
-    ;; (browse-url url)
-    ))
+  (browse-url (tabulated-list-get-id)))
 
 
 (defun flarum--format-title (title)
@@ -86,6 +85,7 @@
   (slug "" :read-only t)
   (shareUrl "" :read-only t))
 
+
 (defun flarum-draw-buffer ()
   "Draw buffer with discussions entries."
   (interactive)
@@ -96,6 +96,7 @@
 				("Titre" ,(- (window-width) 24) :right-align t)])
   (setq tabulated-list-entries (mapcar #'flarum--insert-entry
 				       flarum-discs))
+  (use-local-map flarum-mode-map)
   (tabulated-list-init-header)
   (tabulated-list-print))
 
@@ -105,9 +106,11 @@
 	(vector (flarum-disc-id data)
 		(flarum--format-title (flarum-disc-title data)))))
 
+
+;;; API
 (defun flarum--discussions-api ()
   "Call the Flarum discussions api."
-  (let* ((url "https://emacs.gnu.re/public/api/discussions")
+  (let* ((url (concat flarum-api-endpoint "/discussions"))
 	 (req (request
 		url
 		:parser 'json-read
@@ -124,16 +127,12 @@
 	       :shareUrl (assoc-default 'shareUrl (assoc-default 'attributes v))))))
     data))
 
-(defun flarum-search ()
-  "Cherche dans flarum."
-  (interactive)
-  (let ((data (flarum--discussions-api)))
-     (setq flarum-discs data)
-    (flarum-draw-buffer)))
+
 
 ;;;###autoload
 (defun flarum ()
-  "Flarum."
+  "Flarum.
+\\{flarum-mode-map}"
   (interactive)
   (switch-to-buffer "*Flarum*")
   (unless (eq major-mode 'flarum-mode)
