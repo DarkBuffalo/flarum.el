@@ -1,4 +1,6 @@
-#+title: Flarum.el
+#+title: Emacs fr Flarum forum via Emacs
+
+#+HTML: <img src="assets/screenshot.png" align="right">
 
 Ce paquet est en développement.
 
