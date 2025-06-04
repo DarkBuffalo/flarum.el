@@ -1,7 +1,7 @@
 ;;; flarum.el --- Flarum unofficial tool for Emacs -*- lexical-binding: t; -*-
 
 ;; Version: 0.0.2
-;; Package-Requires: ((emacs "27.1") (request "0.3.2") (transient "0.3.0"))
+;; Package-Requires: ((emacs "27.1") (request "0.3.2") (transient "0.3.0")(shr))
 ;; Author: Matthias David <darkbuffalo@gnu.re>
 
 ;; This file is NOT part of GNU Emacs.
@@ -40,6 +40,7 @@
 (require 'transient)
 (require 'cl-lib)
 (require 'auth-source)
+(require 'shr)  ; For HTML rendering
 
 ;;; Customization
 
@@ -354,6 +355,17 @@
             (lambda (&key error-thrown &allow-other-keys)
               (message "Error loading posts: %s" error-thrown)))))
 
+(defun flarum--render-html (html)
+  "Render HTML content using shr."
+  (if (not html)
+      ""
+    (with-temp-buffer
+      (insert html)
+      (let ((shr-width (- (window-width) 5))
+            (shr-use-fonts nil))
+        (shr-render-region (point-min) (point-max))
+        (buffer-string)))))
+
 (defun flarum--display-posts (title posts)
   "Display POSTS with TITLE in a dedicated buffer."
   (let ((buffer (get-buffer-create "*Flarum Discussion*")))
@@ -370,7 +382,8 @@
           (dolist (post posts-list)
             (when (equal (alist-get 'type post) "posts")
               (let* ((attrs (alist-get 'attributes post))
-                     (content (alist-get 'contentHtml attrs))
+                     (content-html (alist-get 'contentHtml attrs))
+                     (content (flarum--render-html content-html))
                      ;; Look for user info in the relationships or attributes
                      (user-rel (alist-get 'user (alist-get 'relationships post)))
                      (user-id (when user-rel
