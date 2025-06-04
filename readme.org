@@ -1,7 +1,17 @@
-#+title: Emacs fr Flarum forum via Emacs
+#+title: flarum.el
 
 #+HTML: <img src="assets/screenshot.png" align="right">
 
 Ce paquet est en développement.
 
-Un paquet pour lire le forum emacs.gnu.re sur emacs.
+Un paquet qui permet de lire le forum emacs.gnu.re ou un autre forum flarum sur emacs.
+
+** installation
+#+begin_src elisp
+  (use-package flarum
+    :straight (:host github
+               :repo "darkbuffalo/flarum.el")
+    :custom
+    ;; Utilisez auth-source pour stocker les identifiants
+    (flarum-use-auth-source t))
+#+end_src
