@@ -363,16 +363,32 @@
         (insert (propertize title 'face 'flarum-title-face))
         (insert "\n" (make-string (length title) ?=) "\n\n")
 
-        (dolist (post posts)
-          (when (equal (alist-get 'type post) "posts")
-            (let* ((attrs (alist-get 'attributes post))
-                   (content (alist-get 'contentHtml attrs))
-                   (author (alist-get 'username attrs "Anonymous"))
-                   (date (alist-get 'createdAt attrs)))
-              (insert (propertize (format "%s - %s\n" author (or date "Unknown date"))
-                                  'face 'flarum-author-face))
-              (insert (or content "No content") "\n")
-              (insert (make-string 40 ?-) "\n\n"))))
+        ;; Convert to list if it's a vector
+        (let ((posts-list (if (vectorp posts)
+                              (append posts nil)
+                            posts)))
+          (dolist (post posts-list)
+            (when (equal (alist-get 'type post) "posts")
+              (let* ((attrs (alist-get 'attributes post))
+                     (content (alist-get 'contentHtml attrs))
+                     ;; Look for user info in the relationships or attributes
+                     (user-rel (alist-get 'user (alist-get 'relationships post)))
+                     (user-id (when user-rel
+                                (alist-get 'id (alist-get 'data user-rel))))
+                     ;; Find the user in the posts list
+                     (user-data (when user-id
+                                  (cl-find-if (lambda (item)
+                                                (and (equal (alist-get 'type item) "users")
+                                                     (equal (alist-get 'id item) user-id)))
+                                              posts-list)))
+                     (author (if user-data
+                                 (alist-get 'username (alist-get 'attributes user-data))
+                               "Anonymous"))
+                     (date (alist-get 'createdAt attrs)))
+                (insert (propertize (format "%s - %s\n" author (or date "Unknown date"))
+                                    'face 'flarum-author-face))
+                (insert (or content "No content") "\n")
+                (insert (make-string 40 ?-) "\n\n")))))
 
         (goto-char (point-min))
         (special-mode)))
