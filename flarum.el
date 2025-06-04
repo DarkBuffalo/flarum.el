@@ -1,12 +1,12 @@
-;;; flarum.el --- Flarum unofficial tool for Emacs -*- lexical-binding: t; -*-
+;;; flarum.el --- Flarum unofficial client for Emacs -*- lexical-binding: t; -*-
 
 ;; Version: 0.0.2
 ;; Package-Requires: ((emacs "27.1") (request "0.3.2") (transient "0.3.0")(shr))
-;; Author: Matthias David <darkbuffalo@gnu.re>
+;; Author: DarkBuffalo <darkbuffalo@gnu.re>
 
 ;; This file is NOT part of GNU Emacs.
 
-;; Copyright (c) 2022-2023, Matthias David
+;; Copyright (c) 2022-2025, DarkBuffalo
 ;; All rights reserved.
 ;;
 ;; Redistribution and use in source and binary forms, with or without
