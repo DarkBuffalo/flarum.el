@@ -351,24 +351,49 @@
 (defun flarum--like-post-at-point ()
   "Like the post at point."
   (interactive)
-  (let ((post-id (get-text-property (point) 'flarum-post-id)))
-    (if post-id
-        (message "Liking post %s..." post-id)
-      (message "No post at point"))))
+  (unless flarum-auth-token
+    (call-interactively #'flarum-login))
+
+  (when flarum-auth-token
+    (let ((post-id (get-text-property (point) 'flarum-post-id)))
+      (if post-id
+          (flarum--toggle-like post-id)
+        (message "No post at point")))))
+
+(defun flarum--toggle-like (post-id)
+  "Toggle like on post POST-ID."
+  (request (concat (flarum-api-posts) "/" post-id "/relationships/likes")
+    :type "POST"
+    :headers (append '(("Content-Type" . "application/json"))
+                     (flarum--auth-headers))
+    :parser 'json-read
+    :success (cl-function
+              (lambda (&key data &allow-other-keys)
+                (message "Post liked!")
+                ;; Refresh to show updated like count
+                (when (get-buffer "*Flarum Discussion*")
+                  (flarum-view-discussion))))
+    :error (cl-function
+            (lambda (&key error-thrown &allow-other-keys)
+              (message "Error liking post: %s" error-thrown)))))
 
 (defun flarum--reply-to-post-at-point ()
   "Reply to the post at point."
   (interactive)
-  (let ((post-id (get-text-property (point) 'flarum-post-id))
-        (author (get-text-property (point) 'flarum-post-author)))
-    (if post-id
-        (flarum--edit-content
-         (format "Reply to %s:" author)
-         (lambda (content)
-           (when content
-             (flarum--create-post flarum-current-discussion-id
-                                  (format "@%s %s" author content)))))
-      (message "No post at point"))))
+  (unless flarum-auth-token
+    (call-interactively #'flarum-login))
+
+  (when flarum-auth-token
+    (let ((post-id (get-text-property (point) 'flarum-post-id))
+          (author (get-text-property (point) 'flarum-post-author)))
+      (if post-id
+          (flarum--edit-content
+           (format "Reply to %s:" author)
+           (lambda (content)
+             (when content
+               (flarum--create-post flarum-current-discussion-id
+                                    (format "@%s %s" author content)))))
+        (message "No post at point")))))
 
 (defun flarum--make-action-button (label action &rest properties)
   "Create an action button with LABEL that performs ACTION."
@@ -400,6 +425,7 @@
 
 (defun flarum--fetch-discussion-posts (discussion-id)
   "Fetch and display posts for DISCUSSION-ID."
+  (setq flarum-current-discussion-id discussion-id)  ; Store the discussion ID
   (request (concat (flarum-api-discussions) "/" discussion-id)
     :params '(("include" . "posts,posts.user"))
     :parser 'json-read
@@ -408,7 +434,7 @@
                 (let* ((discussion (alist-get 'data data))
                        (included (alist-get 'included data))
                        (title (alist-get 'title (alist-get 'attributes discussion))))
-                  (flarum--display-posts title included))))
+                  (flarum--display-posts title included discussion-id))))
     :error (cl-function
             (lambda (&key error-thrown &allow-other-keys)
               (message "Error loading posts: %s" error-thrown)))))
@@ -424,12 +450,13 @@
         (shr-render-region (point-min) (point-max))
         (buffer-string)))))
 
-(defun flarum--display-posts (title posts)
-  "Display POSTS with TITLE in a dedicated buffer."
+(defun flarum--display-posts (title posts discussion-id)
+  "Display POSTS with TITLE in a dedicated buffer for DISCUSSION-ID."
   (let ((buffer (get-buffer-create "*Flarum Discussion*")))
     (with-current-buffer buffer
       (let ((inhibit-read-only t))
         (erase-buffer)
+        (setq flarum-current-discussion-id discussion-id)  ; Store it in the buffer
 
         ;; Header
         (insert "\n")
@@ -493,6 +520,9 @@
                          #'flarum--reply-to-post-at-point
                          'flarum-post-id post-id
                          'flarum-post-author author))
+                (when flarum-auth-token
+                  (insert " • ")
+                  (insert (propertize "✓ Logged in" 'face 'flarum-likes-face)))
                 (insert "\n")
 
                 ;; Separator
@@ -501,8 +531,6 @@
                 (insert "\n\n")))))
 
         (goto-char (point-min))
-        (setq flarum-current-discussion-id
-              (flarum--get-current-discussion-id))
 
         ;; Set up the mode
         (special-mode)
@@ -511,7 +539,7 @@
                       (define-key map (kbd "l") #'flarum--like-post-at-point)
                       (define-key map (kbd "r") #'flarum--reply-to-post-at-point)
                       (define-key map (kbd "R") #'flarum-reply)
-                      (define-key map (kbd "g") #'flarum-refresh)
+                      (define-key map (kbd "g") #'flarum-view-discussion)
                       (define-key map (kbd "q") #'quit-window)
                       map))
         (use-local-map flarum--post-map)))
