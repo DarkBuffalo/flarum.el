@@ -97,19 +97,34 @@
 (defvar flarum--edit-callback nil
   "Callback function for edit completion.")
 
+(defvar-local flarum--post-map nil
+  "Keymap for post actions.")
+
 ;;; Faces
 
 (defface flarum-title-face
-  '((t :inherit font-lock-type-face))
+  '((t :inherit font-lock-type-face :weight bold :height 1.2))
   "Face used for the discussion title.")
 
 (defface flarum-author-face
-  '((t :inherit font-lock-comment-face))
+  '((t :inherit font-lock-keyword-face :weight bold))
   "Face used for post authors.")
 
 (defface flarum-date-face
   '((t :inherit font-lock-comment-face))
   "Face used for dates.")
+
+(defface flarum-action-face
+  '((t :inherit link :weight normal))
+  "Face used for action buttons.")
+
+(defface flarum-separator-face
+  '((t :inherit shadow :strike-through t))
+  "Face used for separators.")
+
+(defface flarum-likes-face
+  '((t :inherit font-lock-constant-face))
+  "Face used for likes count.")
 
 ;;; Structs
 
@@ -331,6 +346,49 @@
   (kill-buffer)
   (message "Edit cancelled"))
 
+;;; Post Actions
+
+(defun flarum--like-post-at-point ()
+  "Like the post at point."
+  (interactive)
+  (let ((post-id (get-text-property (point) 'flarum-post-id)))
+    (if post-id
+        (message "Liking post %s..." post-id)
+      (message "No post at point"))))
+
+(defun flarum--reply-to-post-at-point ()
+  "Reply to the post at point."
+  (interactive)
+  (let ((post-id (get-text-property (point) 'flarum-post-id))
+        (author (get-text-property (point) 'flarum-post-author)))
+    (if post-id
+        (flarum--edit-content
+         (format "Reply to %s:" author)
+         (lambda (content)
+           (when content
+             (flarum--create-post flarum-current-discussion-id
+                                  (format "@%s %s" author content)))))
+      (message "No post at point"))))
+
+(defun flarum--make-action-button (label action &rest properties)
+  "Create an action button with LABEL that performs ACTION."
+  (apply #'propertize label
+         'face 'flarum-action-face
+         'mouse-face 'highlight
+         'keymap (let ((map (make-sparse-keymap)))
+                   (define-key map [mouse-1] action)
+                   (define-key map (kbd "RET") action)
+                   map)
+         'help-echo label
+         properties))
+
+(defun flarum--format-date (date-string)
+  "Format DATE-STRING for display."
+  (if date-string
+      (format-time-string "%Y-%m-%d %H:%M"
+                          (date-to-time date-string))
+    "Unknown date"))
+
 ;;; Viewing Discussions
 
 (defun flarum-view-discussion ()
@@ -372,8 +430,14 @@
     (with-current-buffer buffer
       (let ((inhibit-read-only t))
         (erase-buffer)
+
+        ;; Header
+        (insert "\n")
         (insert (propertize title 'face 'flarum-title-face))
-        (insert "\n" (make-string (length title) ?=) "\n\n")
+        (insert "\n")
+        (insert (propertize (make-string (window-width) ?─)
+                            'face 'flarum-separator-face))
+        (insert "\n\n")
 
         ;; Convert to list if it's a vector
         (let ((posts-list (if (vectorp posts)
@@ -382,13 +446,12 @@
           (dolist (post posts-list)
             (when (equal (alist-get 'type post) "posts")
               (let* ((attrs (alist-get 'attributes post))
+                     (post-id (alist-get 'id post))
                      (content-html (alist-get 'contentHtml attrs))
                      (content (flarum--render-html content-html))
-                     ;; Look for user info in the relationships or attributes
                      (user-rel (alist-get 'user (alist-get 'relationships post)))
                      (user-id (when user-rel
                                 (alist-get 'id (alist-get 'data user-rel))))
-                     ;; Find the user in the posts list
                      (user-data (when user-id
                                   (cl-find-if (lambda (item)
                                                 (and (equal (alist-get 'type item) "users")
@@ -397,14 +460,61 @@
                      (author (if user-data
                                  (alist-get 'username (alist-get 'attributes user-data))
                                "Anonymous"))
-                     (date (alist-get 'createdAt attrs)))
-                (insert (propertize (format "%s - %s\n" author (or date "Unknown date"))
-                                    'face 'flarum-author-face))
-                (insert (or content "No content") "\n")
-                (insert (make-string 40 ?-) "\n\n")))))
+                     (date (flarum--format-date (alist-get 'createdAt attrs)))
+                     (likes-count (or (alist-get 'likesCount attrs) 0)))
+
+                ;; Author and date line
+                (insert (propertize author 'face 'flarum-author-face
+                                    'flarum-post-id post-id
+                                    'flarum-post-author author))
+                (insert " • ")
+                (insert (propertize date 'face 'flarum-date-face))
+                (insert "\n\n")
+
+                ;; Content
+                (let ((content-start (point)))
+                  (insert (or content "No content"))
+                  (add-text-properties content-start (point)
+                                       `(flarum-post-id ,post-id
+                                         flarum-post-author ,author)))
+                (insert "\n\n")
+
+                ;; Action bar
+                (insert "  ")
+                (insert (flarum--make-action-button
+                         (if (> likes-count 0)
+                             (format "♥ Like (%d)" likes-count)
+                           "♥ Like")
+                         #'flarum--like-post-at-point
+                         'flarum-post-id post-id))
+                (insert "  •  ")
+                (insert (flarum--make-action-button
+                         "↩ Reply"
+                         #'flarum--reply-to-post-at-point
+                         'flarum-post-id post-id
+                         'flarum-post-author author))
+                (insert "\n")
+
+                ;; Separator
+                (insert (propertize (make-string (- (window-width) 10) ?─)
+                                    'face 'flarum-separator-face))
+                (insert "\n\n")))))
 
         (goto-char (point-min))
-        (special-mode)))
+        (setq flarum-current-discussion-id
+              (flarum--get-current-discussion-id))
+
+        ;; Set up the mode
+        (special-mode)
+        (setq-local flarum--post-map
+                    (let ((map (make-sparse-keymap)))
+                      (define-key map (kbd "l") #'flarum--like-post-at-point)
+                      (define-key map (kbd "r") #'flarum--reply-to-post-at-point)
+                      (define-key map (kbd "R") #'flarum-reply)
+                      (define-key map (kbd "g") #'flarum-refresh)
+                      (define-key map (kbd "q") #'quit-window)
+                      map))
+        (use-local-map flarum--post-map)))
     (switch-to-buffer buffer)))
 
 ;;; Opening in Browser
