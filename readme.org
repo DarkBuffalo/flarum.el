@@ -15,3 +15,9 @@ Un paquet qui permet de lire le forum emacs.gnu.re ou un autre forum flarum sur 
     ;; Utilisez auth-source pour stocker les identifiants
     (flarum-use-auth-source t))
 #+end_src
+
+
+
+* Screenshot
+
+#+HTML: <img src="assets/disc-mode.png" align="left">
