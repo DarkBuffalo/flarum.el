@@ -136,6 +136,19 @@
   (slug "" :read-only t)
   (shareUrl "" :read-only t))
 
+;;; Mode Line
+
+(defun flarum--update-mode-line ()
+  "Update the mode line to show login status."
+  (force-mode-line-update t))
+
+(defun flarum--mode-name ()
+  "Return the mode name with login status."
+  (if flarum-auth-token
+      "Flarum[✓]"
+    "Flarum"))
+
+
 ;;; Mode Definition
 
 (defvar flarum-mode-map
@@ -143,7 +156,6 @@
     (define-key map (kbd "?") #'flarum-help)
     (define-key map (kbd "o") #'flarum-open)
     (define-key map (kbd "n") #'flarum-new-discussion)
-    (define-key map (kbd "r") #'flarum-reply)
     (define-key map (kbd "v") #'flarum-view-discussion)
     (define-key map (kbd "l") #'flarum-login)
     (define-key map (kbd "L") #'flarum-logout)
@@ -160,7 +172,9 @@
          ("Title" 0 nil)])
   (setq tabulated-list-padding 2)
   (setq tabulated-list-sort-key '("ID" . t))
-  (add-hook 'tabulated-list-revert-hook #'flarum-refresh nil t))
+  (add-hook 'tabulated-list-revert-hook #'flarum-refresh nil t)
+  ;; Update mode name dynamically
+  (setq mode-name '(:eval (flarum--mode-name))))
 
 ;;; Transient
 
@@ -172,8 +186,7 @@
    ("g" "Refresh" flarum-refresh)
    ("q" "Quit" quit-window)]
   ["Writing"
-   ("n" "New discussion" flarum-new-discussion)
-   ("r" "Reply to discussion" flarum-reply)]
+   ("n" "New discussion" flarum-new-discussion)]
   ["Authentication"
    ("l" "Login" flarum-login)
    ("L" "Logout" flarum-logout)])
@@ -210,6 +223,7 @@
                   (lambda (&key data &allow-other-keys)
                     (setq flarum-auth-token (alist-get 'token data))
                     (message "Login successful!")
+                    (flarum--update-mode-line)
                     (flarum-refresh)))
         :error (cl-function
                 (lambda (&key error-thrown &allow-other-keys)
@@ -219,6 +233,7 @@
   "Logout from Flarum."
   (interactive)
   (setq flarum-auth-token nil)
+  (flarum--update-mode-line)
   (message "Logged out!"))
 
 (defun flarum--auth-headers ()
@@ -565,9 +580,6 @@
                          'flarum-post-id post-id
                          'flarum-post-number (or post-number post-counter)
                          'flarum-post-author author))
-                (when flarum-auth-token
-                  (insert " • ")
-                  (insert (propertize "✓ Logged in" 'face 'flarum-likes-face)))
                 (insert "\n")
 
                 ;; Separator
@@ -579,12 +591,16 @@
 
         ;; Set up the mode
         (special-mode)
+        ;; Update mode name to show login status
+        (setq mode-name '(:eval (if flarum-auth-token
+                                    "Flarum[✓]"
+                                  "Flarum")))
+        (force-mode-line-update)
         (setq-local flarum--post-map
                     (let ((map (make-sparse-keymap)))
                       (define-key map (kbd "l") #'flarum--like-post-at-point)
                       (define-key map (kbd "r") #'flarum--reply-to-post-at-point)
                       (define-key map (kbd "R") #'flarum-reply)
-                      (define-key map (kbd "g") #'flarum-view-discussion)
                       (define-key map (kbd "q") #'quit-window)
                       map))
         (use-local-map flarum--post-map)))
