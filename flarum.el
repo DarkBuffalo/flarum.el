@@ -298,7 +298,7 @@
                         (("discussion" .
                           (("data" .
                             (("type" . "discussions")
-                             ("id" . ,discussion-id)))))))))))
+                             ("id" . ,(format "%s" discussion-id))))))))))))
     :headers (append '(("Content-Type" . "application/json"))
                      (flarum--auth-headers))
     :parser 'json-read
@@ -385,15 +385,48 @@
 
   (when flarum-auth-token
     (let ((post-id (get-text-property (point) 'flarum-post-id))
+          (post-number (get-text-property (point) 'flarum-post-number))
           (author (get-text-property (point) 'flarum-post-author)))
       (if post-id
           (flarum--edit-content
            (format "Reply to %s:" author)
            (lambda (content)
              (when content
-               (flarum--create-post flarum-current-discussion-id
-                                    (format "@%s %s" author content)))))
+               ;; Use the post ID (not the number) for the reference
+               (let ((reply-content
+                      (format "@\"%s\"#p%s %s"
+                              author
+                              post-id  ; Use the actual post ID
+                              content)))
+                 (flarum--create-post flarum-current-discussion-id reply-content)))))
         (message "No post at point")))))
+
+(defun flarum--create-reply (reply-to-id content author)
+  "Create a reply to post REPLY-TO-ID with CONTENT mentioning AUTHOR."
+  (request (flarum-api-posts)
+    :type "POST"
+    :data (json-encode
+           `(("data" . (("type" . "posts")
+                       ("attributes" . (("content" . ,(format "@%s %s" author content))))
+                       ("relationships" .
+                        (("discussion" .
+                          (("data" .
+                            (("type" . "discussions")
+                             ("id" . ,flarum-current-discussion-id)))))
+                         ("replyTo" .
+                          (("data" .
+                            (("type" . "posts")
+                             ("id" . ,reply-to-id)))))))))))
+    :headers (append '(("Content-Type" . "application/json"))
+                     (flarum--auth-headers))
+    :parser 'json-read
+    :success (cl-function
+              (lambda (&key data &allow-other-keys)
+                (message "Reply posted successfully!")
+                (flarum-view-discussion)))
+    :error (cl-function
+            (lambda (&key error-thrown &allow-other-keys)
+              (message "Error posting reply: %s" error-thrown)))))
 
 (defun flarum--make-action-button (label action &rest properties)
   "Create an action button with LABEL that performs ACTION."
@@ -419,7 +452,9 @@
 (defun flarum-view-discussion ()
   "View posts in the selected discussion."
   (interactive)
-  (let ((discussion-id (flarum--get-current-discussion-id)))
+  (let ((discussion-id (if (derived-mode-p 'flarum-mode)
+                          (flarum--get-current-discussion-id)
+                        flarum-current-discussion-id)))
     (when discussion-id
       (flarum--fetch-discussion-posts discussion-id))))
 
@@ -452,7 +487,8 @@
 
 (defun flarum--display-posts (title posts discussion-id)
   "Display POSTS with TITLE in a dedicated buffer for DISCUSSION-ID."
-  (let ((buffer (get-buffer-create "*Flarum Discussion*")))
+  (let ((buffer (get-buffer-create "*Flarum Discussion*"))
+        (post-counter 0))
     (with-current-buffer buffer
       (let ((inhibit-read-only t))
         (erase-buffer)
@@ -472,8 +508,10 @@
                             posts)))
           (dolist (post posts-list)
             (when (equal (alist-get 'type post) "posts")
+              (setq post-counter (1+ post-counter))
               (let* ((attrs (alist-get 'attributes post))
                      (post-id (alist-get 'id post))
+                     (post-number (alist-get 'number attrs))
                      (content-html (alist-get 'contentHtml attrs))
                      (content (flarum--render-html content-html))
                      (user-rel (alist-get 'user (alist-get 'relationships post)))
@@ -490,9 +528,14 @@
                      (date (flarum--format-date (alist-get 'createdAt attrs)))
                      (likes-count (or (alist-get 'likesCount attrs) 0)))
 
-                ;; Author and date line
+                ;; Post number and author line - show both IDs for debugging
+                (insert (propertize (format "#%s (id:%s) "
+                                            (or post-number post-counter)
+                                            post-id)
+                                    'face 'flarum-date-face))
                 (insert (propertize author 'face 'flarum-author-face
                                     'flarum-post-id post-id
+                                    'flarum-post-number (or post-number post-counter)
                                     'flarum-post-author author))
                 (insert " • ")
                 (insert (propertize date 'face 'flarum-date-face))
@@ -503,6 +546,7 @@
                   (insert (or content "No content"))
                   (add-text-properties content-start (point)
                                        `(flarum-post-id ,post-id
+                                         flarum-post-number ,(or post-number post-counter)
                                          flarum-post-author ,author)))
                 (insert "\n\n")
 
@@ -519,6 +563,7 @@
                          "↩ Reply"
                          #'flarum--reply-to-post-at-point
                          'flarum-post-id post-id
+                         'flarum-post-number (or post-number post-counter)
                          'flarum-post-author author))
                 (when flarum-auth-token
                   (insert " • ")
